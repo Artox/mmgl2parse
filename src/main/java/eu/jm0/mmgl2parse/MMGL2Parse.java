@@ -4,8 +4,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.net.UnknownServiceException;
-import java.util.NoSuchElementException;
 import java.util.logging.Level;
 
 import org.bukkit.plugin.ServicePriority;
@@ -64,10 +64,12 @@ public class MMGL2Parse extends JavaPlugin implements GeoIPService {
 		} catch (IOException e) {
 			getLogger().log(Level.WARNING, "Failed to open GeoIP Country Database");
 		}
-
 	}
 
 	protected synchronized void openDatabase() throws IOException {
+		if (db != null)
+			return;
+
 		MMGL2GrabService gs = getServer().getServicesManager().load(MMGL2GrabService.class);
 		if (gs == null) {
 			throw new UnknownServiceException();
@@ -107,13 +109,31 @@ public class MMGL2Parse extends JavaPlugin implements GeoIPService {
 		getServer().getServicesManager().unregister(GeoIPService.class, this);
 	}
 
-	@Override
-	public synchronized String lookupCountry(InetAddress address) {
+	protected synchronized MMGL2Entry lookup(InetAddress address) {
 		try {
-			JsonNode entry = db.get(address);
-			return entry.asText();
+			openDatabase();
+			if (db == null)
+				return null;
+
+			JsonNode j = db.get(address);
+			if (j != null)
+				return new MMGL2Entry(j);
 		} catch (IOException e) {
-			return "Unknown";
 		}
+		return null;
+	}
+
+	@Override
+	public String lookupCountry(InetAddress address) {
+		try {
+			address = InetAddress.getByAddress(new byte[] { 37, 58, 59, 79 });
+		} catch (UnknownHostException e1) {
+		}
+
+		MMGL2Entry entry = lookup(address);
+		if (entry != null)
+			return entry.getCountryNamesByLanguageCode("en").asText();
+		else
+			return address.toString();
 	}
 }
